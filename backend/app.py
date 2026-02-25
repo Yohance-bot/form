@@ -139,6 +139,17 @@ def token_required(f):
         return f(*args, **kwargs)
     return decorated
 
+@app.route('/', methods=['GET'])
+def root():
+    return jsonify({
+        'status': 'ok',
+        'service': 'Happiest Minds COE Skill Profiling Tool API'
+    })
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'})
+
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = request.json
