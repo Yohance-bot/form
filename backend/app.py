@@ -13,13 +13,27 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from sqlalchemy import text
 from werkzeug.exceptions import BadRequest
+import traceback
 
 app = Flask(__name__)
 CORS(app, origins=os.environ.get("CORS_ORIGIN", "*"))
 
 # Config
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///profiles.db')
+
+def _normalize_database_url(url: str) -> str:
+    if not url:
+        return 'sqlite:///profiles.db'
+    u = url.strip()
+    # Render/Heroku style URLs may start with postgres:// which SQLAlchemy may not accept.
+    if u.startswith('postgres://'):
+        u = 'postgresql://' + u[len('postgres://'):]
+    # Ensure SSL for managed Postgres unless explicitly provided.
+    if u.startswith('postgresql://') and 'sslmode=' not in u:
+        u = u + ('&' if '?' in u else '?') + 'sslmode=require'
+    return u
+
+app.config['SQLALCHEMY_DATABASE_URI'] = _normalize_database_url(os.environ.get('DATABASE_URL', ''))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2MB max upload
 
@@ -160,6 +174,8 @@ def handle_bad_request(e):
 @app.errorhandler(Exception)
 def handle_exception(e):
     if request.path.startswith('/api'):
+        print('❌ API error:', repr(e))
+        traceback.print_exc()
         return jsonify({'error': 'Internal server error'}), 500
     raise e
 
