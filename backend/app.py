@@ -37,6 +37,19 @@ app.config['SQLALCHEMY_DATABASE_URI'] = _normalize_database_url(os.environ.get('
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2MB max upload
 
+def _to_int_or_none(val):
+    if val is None:
+        return None
+    if isinstance(val, int):
+        return val
+    s = str(val).strip()
+    if s == '':
+        return None
+    try:
+        return int(s)
+    except Exception:
+        return None
+
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 
@@ -205,11 +218,15 @@ def submit_profile():
     existing = Profile.query.filter_by(hm_id=hm_id).first()
     if existing:
         # Update
+        int_fields = {'total_exp_years','total_exp_months','relevant_exp_years','relevant_exp_months'}
         for field in ['name','competency','joining_date','total_exp_years','total_exp_months',
                       'relevant_exp_years','relevant_exp_months','reporting_location_type',
                       'customer_name','customer_address','office_city','primary_role','profile_pic']:
             if field in data:
-                setattr(existing, field, data[field])
+                if field in int_fields:
+                    setattr(existing, field, _to_int_or_none(data[field]))
+                else:
+                    setattr(existing, field, data[field])
         for json_field in ['industries','education','skills','certifications','projects']:
             if json_field in data:
                 if json_field == 'skills':
@@ -225,10 +242,10 @@ def submit_profile():
         name=data.get('name', ''),
         competency=data.get('competency'),
         joining_date=data.get('joining_date'),
-        total_exp_years=data.get('total_exp_years'),
-        total_exp_months=data.get('total_exp_months'),
-        relevant_exp_years=data.get('relevant_exp_years'),
-        relevant_exp_months=data.get('relevant_exp_months'),
+        total_exp_years=_to_int_or_none(data.get('total_exp_years')),
+        total_exp_months=_to_int_or_none(data.get('total_exp_months')),
+        relevant_exp_years=_to_int_or_none(data.get('relevant_exp_years')),
+        relevant_exp_months=_to_int_or_none(data.get('relevant_exp_months')),
         reporting_location_type=data.get('reporting_location_type'),
         customer_name=data.get('customer_name'),
         customer_address=data.get('customer_address'),
