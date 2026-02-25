@@ -12,6 +12,7 @@ from functools import wraps
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from sqlalchemy import text
+from werkzeug.exceptions import BadRequest
 
 app = Flask(__name__)
 CORS(app, origins=os.environ.get("CORS_ORIGIN", "*"))
@@ -150,6 +151,18 @@ def root():
 def health():
     return jsonify({'status': 'ok'})
 
+@app.errorhandler(BadRequest)
+def handle_bad_request(e):
+    if request.path.startswith('/api'):
+        return jsonify({'error': 'Bad request'}), 400
+    return e
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    if request.path.startswith('/api'):
+        return jsonify({'error': 'Internal server error'}), 500
+    raise e
+
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = request.json
@@ -166,7 +179,9 @@ def admin_login():
 
 @app.route('/api/profile', methods=['POST'])
 def submit_profile():
-    data = request.json
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Invalid JSON body'}), 400
     hm_id = data.get('hm_id', '').strip()
     if not hm_id:
         return jsonify({'error': 'Happiest Minds ID is required'}), 400
