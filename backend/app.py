@@ -598,6 +598,13 @@ def create_default_admin():
             db.session.commit()
             print(f"✅ Default admin created. Username: admin, Password: {admin_password}")
 
+# Ensure DB/tables exist when running under gunicorn/import (Render)
+if os.environ.get('SKIP_DB_INIT', '').strip().lower() not in {'1', 'true', 'yes'}:
+    try:
+        create_default_admin()
+    except Exception:
+        # Don't crash the server on init failures; requests will surface errors.
+        pass
+
 if __name__ == '__main__':
-    create_default_admin()
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5050)))
