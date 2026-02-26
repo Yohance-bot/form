@@ -311,31 +311,152 @@ def set_profile_approval(profile_id):
     db.session.commit()
     return jsonify({'message': 'Updated', 'approved': profile.approved, 'approved_at': profile.approved_at.isoformat() if profile.approved_at else None})
 
+def _safe_json_loads(val, default):
+    try:
+        if val is None:
+            return default
+        if isinstance(val, (list, dict)):
+            return val
+        s = str(val).strip()
+        if not s:
+            return default
+        return json.loads(s)
+    except Exception:
+        return default
+
+def _fmt_join(values):
+    parts = []
+    for v in values or []:
+        s = (str(v) if v is not None else '').strip()
+        if s:
+            parts.append(s)
+    return '; '.join(parts)
+
+def _fmt_education(education):
+    rows = []
+    for e in education or []:
+        if not isinstance(e, dict):
+            continue
+        degree = (e.get('degree') or '').strip()
+        spec = (e.get('specialisation') or '').strip()
+        inst = (e.get('institution') or '').strip()
+        year = (e.get('year') or '').strip()
+        grade = (e.get('grade') or '').strip()
+        line = ' | '.join([p for p in [degree, spec, inst, year, grade] if p])
+        if line:
+            rows.append(line)
+    return '\n'.join(rows)
+
+def _fmt_skills(skills):
+    skills_norm = normalize_skills_list(skills or [])
+    rows = []
+    for s in skills_norm:
+        if not isinstance(s, dict):
+            continue
+        skill_id = (s.get('skill_id') or '').strip()
+        name = (s.get('skill_name') or '').strip()
+        group = (s.get('platform_group') or '').strip()
+        ps = (s.get('primary_secondary') or '').strip()
+        years = (str(s.get('years_exp')) if s.get('years_exp') is not None else '').strip()
+        sa = (s.get('self_assessment') or '').strip()
+        main = ' '.join([p for p in [skill_id, name] if p]).strip()
+        meta = _fmt_join([group, ps, (f"{years}y" if years else ''), sa])
+        line = f"{main} — {meta}" if meta else main
+        if line:
+            rows.append(line)
+    return '\n'.join(rows)
+
+def _fmt_certs(certs):
+    rows = []
+    for c in certs or []:
+        if not isinstance(c, dict):
+            continue
+        name = (c.get('name') or '').strip()
+        provider = (c.get('provider') or '').strip()
+        date = (c.get('date') or '').strip()
+        expiry = (c.get('expiry') or '').strip()
+        meta = _fmt_join([provider, (f"Obtained: {date}" if date else ''), (f"Expiry: {expiry}" if expiry else '')])
+        line = f"{name} — {meta}" if meta else name
+        if line:
+            rows.append(line)
+    return '\n'.join(rows)
+
+def _fmt_projects(projects):
+    rows = []
+    for pr in projects or []:
+        if not isinstance(pr, dict):
+            continue
+        title = (pr.get('title') or '').strip()
+        role = (pr.get('role') or '').strip()
+        duration = (pr.get('duration') or '').strip()
+        tools = (pr.get('tools') or '').strip()
+        desc = (pr.get('description') or '').strip()
+        resp = (pr.get('responsibility') or '').strip()
+        awards = (pr.get('awards') or '').strip()
+        header = ' | '.join([p for p in [title, role, duration] if p]).strip()
+        details = []
+        if tools:
+            details.append(f"Tools: {tools}")
+        if desc:
+            details.append(f"Desc: {desc}")
+        if resp:
+            details.append(f"Resp: {resp}")
+        if awards:
+            details.append(f"Awards: {awards}")
+        if header and details:
+            rows.append(header + "\n" + '\n'.join(details))
+        elif header:
+            rows.append(header)
+        elif details:
+            rows.append('\n'.join(details))
+    return '\n\n'.join(rows)
+
 @app.route('/api/admin/export/csv', methods=['GET'])
 @token_required
 def export_csv():
     profiles = Profile.query.all()
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['HM ID','Name','Competency','Joining Date','Total Exp (Y)','Total Exp (M)',
-                     'Relevant Exp (Y)','Relevant Exp (M)','Location Type','Customer/Office',
-                     'Primary Role','Industries','Skills','Certifications','Projects','Created At'])
+    writer.writerow([
+        'HM ID','Name','Competency','Joining Date',
+        'Total Exp (Y)','Total Exp (M)','Relevant Exp (Y)','Relevant Exp (M)',
+        'Location Type','Customer Name','Customer Address','Office City',
+        'Primary Role','Industries',
+        'Education',
+        'Skills (Detailed)',
+        'Certifications (Detailed)',
+        'Projects (Detailed)',
+        'Has Profile Pic',
+        'Approved','Approved At','Created At','Updated At'
+    ])
     for p in profiles:
-        skills_norm = normalize_skills_list(json.loads(p.skills or '[]'))
-        skills_str = '; '.join([
-            f"{s.get('skill_id') or ''} {s.get('skill_name','')}".strip()
-            for s in skills_norm
+        industries = _safe_json_loads(p.industries, [])
+        education = _safe_json_loads(p.education, [])
+        skills = _safe_json_loads(p.skills, [])
+        certs = _safe_json_loads(p.certifications, [])
+        projects = _safe_json_loads(p.projects, [])
+
+        industries_str = _fmt_join(industries)
+        education_str = _fmt_education(education)
+        skills_str = _fmt_skills(skills)
+        certs_str = _fmt_certs(certs)
+        projects_str = _fmt_projects(projects)
+
+        writer.writerow([
+            p.hm_id, p.name, p.competency, p.joining_date,
+            p.total_exp_years, p.total_exp_months, p.relevant_exp_years, p.relevant_exp_months,
+            p.reporting_location_type, p.customer_name, p.customer_address, p.office_city,
+            p.primary_role, industries_str,
+            education_str,
+            skills_str,
+            certs_str,
+            projects_str,
+            bool(p.profile_pic),
+            bool(p.approved),
+            p.approved_at.isoformat() if p.approved_at else '',
+            p.created_at.isoformat() if p.created_at else '',
+            p.updated_at.isoformat() if p.updated_at else ''
         ])
-        certs_str = '; '.join([c.get('name','') for c in json.loads(p.certifications or '[]')])
-        projects_str = '; '.join([pr.get('title','') for pr in json.loads(p.projects or '[]')])
-        industries_str = '; '.join(json.loads(p.industries or '[]'))
-        location_detail = p.customer_name if p.reporting_location_type == 'customer' else p.office_city
-        writer.writerow([p.hm_id, p.name, p.competency, p.joining_date,
-                         p.total_exp_years, p.total_exp_months,
-                         p.relevant_exp_years, p.relevant_exp_months,
-                         p.reporting_location_type, location_detail,
-                         p.primary_role, industries_str, skills_str, certs_str, projects_str,
-                         p.created_at.isoformat()])
     output.seek(0)
     return send_file(io.BytesIO(output.getvalue().encode()), mimetype='text/csv',
                      as_attachment=True, download_name='profiles.csv')
@@ -348,9 +469,18 @@ def export_excel():
     ws = wb.active
     ws.title = 'Profiles'
 
-    headers = ['HM ID','Name','Competency','Joining Date','Total Exp (Y)','Total Exp (M)',
-               'Relevant Exp (Y)','Relevant Exp (M)','Location Type','Location Detail',
-               'Primary Role','Industries','Skills','Certifications','Projects','Submitted At']
+    headers = [
+        'HM ID','Name','Competency','Joining Date',
+        'Total Exp (Y)','Total Exp (M)','Relevant Exp (Y)','Relevant Exp (M)',
+        'Location Type','Customer Name','Customer Address','Office City',
+        'Primary Role','Industries',
+        'Education',
+        'Skills (Detailed)',
+        'Certifications (Detailed)',
+        'Projects (Detailed)',
+        'Has Profile Pic',
+        'Approved','Approved At','Created At','Updated At'
+    ]
     header_fill = PatternFill(start_color='1F6E3C', end_color='1F6E3C', fill_type='solid')
     header_font = Font(color='FFFFFF', bold=True)
     
@@ -361,22 +491,33 @@ def export_excel():
         cell.alignment = Alignment(horizontal='center')
     
     for p in profiles:
-        skills_norm = normalize_skills_list(json.loads(p.skills or '[]'))
-        skills_str = '; '.join([
-            f"{s.get('skill_name','')} ({s.get('primary_secondary','')})"
-            for s in skills_norm
+        industries = _safe_json_loads(p.industries, [])
+        education = _safe_json_loads(p.education, [])
+        skills = _safe_json_loads(p.skills, [])
+        certs = _safe_json_loads(p.certifications, [])
+        projects = _safe_json_loads(p.projects, [])
+
+        industries_str = _fmt_join(industries)
+        education_str = _fmt_education(education)
+        skills_str = _fmt_skills(skills)
+        certs_str = _fmt_certs(certs)
+        projects_str = _fmt_projects(projects)
+
+        ws.append([
+            p.hm_id, p.name, p.competency, p.joining_date,
+            p.total_exp_years, p.total_exp_months, p.relevant_exp_years, p.relevant_exp_months,
+            p.reporting_location_type, p.customer_name, p.customer_address, p.office_city,
+            p.primary_role, industries_str,
+            education_str,
+            skills_str,
+            certs_str,
+            projects_str,
+            bool(p.profile_pic),
+            bool(p.approved),
+            p.approved_at.isoformat() if p.approved_at else '',
+            p.created_at.isoformat() if p.created_at else '',
+            p.updated_at.isoformat() if p.updated_at else ''
         ])
-        certs_str = '; '.join([f"{c.get('name','')} - {c.get('provider','')}" 
-                               for c in json.loads(p.certifications or '[]')])
-        projects_str = '; '.join([pr.get('title','') for pr in json.loads(p.projects or '[]')])
-        industries_str = '; '.join(json.loads(p.industries or '[]'))
-        location_detail = p.customer_name if p.reporting_location_type == 'customer' else p.office_city
-        ws.append([p.hm_id, p.name, p.competency, p.joining_date,
-                   p.total_exp_years, p.total_exp_months,
-                   p.relevant_exp_years, p.relevant_exp_months,
-                   p.reporting_location_type, location_detail,
-                   p.primary_role, industries_str, skills_str, certs_str, projects_str,
-                   p.created_at.isoformat()])
 
     for col in ws.columns:
         max_len = max(len(str(cell.value or '')) for cell in col)
