@@ -3,7 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 const API = import.meta.env.VITE_API_URL || "";
 
 function getQueryParam(name) {
-  const params = new URLSearchParams(window.location.search);
+  const hash = window.location.hash || "";
+  const qIndex = hash.indexOf("?");
+  const hashQuery = qIndex >= 0 ? hash.slice(qIndex + 1) : "";
+  const params = new URLSearchParams(hashQuery || window.location.search);
   return params.get(name) || "";
 }
 
@@ -40,7 +43,12 @@ export default function View() {
       setProfile(data);
 
       const url = new URL(window.location.href);
-      url.searchParams.set("hm_id", v);
+      if (url.hash && url.hash.includes("/view")) {
+        const hashBase = url.hash.split("?")[0];
+        url.hash = `${hashBase}?hm_id=${encodeURIComponent(v)}`;
+      } else {
+        url.searchParams.set("hm_id", v);
+      }
       window.history.replaceState({}, "", url.toString());
     } catch (e) {
       setError(e.message);

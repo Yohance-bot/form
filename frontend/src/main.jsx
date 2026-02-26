@@ -7,8 +7,10 @@ import "./index.css";
 
 const ADMIN_PATH_PREFIX = "/hmcoe-admin";
 
-const isAdmin = window.location.pathname.startsWith(ADMIN_PATH_PREFIX);
-const isView = window.location.pathname.startsWith("/view");
+const hashPath = (window.location.hash || "").replace(/^#/, "");
+const effectivePath = hashPath || window.location.pathname;
+const isAdmin = effectivePath.startsWith(ADMIN_PATH_PREFIX);
+const isView = effectivePath.startsWith("/view");
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

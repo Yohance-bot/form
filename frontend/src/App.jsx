@@ -176,7 +176,7 @@ export default function App() {
     finally { setSubmitting(false); }
   };
 
-  const viewLink = profile.hm_id ? `${window.location.origin}/view?hm_id=${encodeURIComponent(profile.hm_id)}` : "";
+  const viewLink = profile.hm_id ? `${window.location.origin}/#/view?hm_id=${encodeURIComponent(profile.hm_id)}` : "";
 
   if (submitted) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">

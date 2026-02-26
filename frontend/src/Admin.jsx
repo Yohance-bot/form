@@ -250,7 +250,7 @@ export default function Admin() {
                   {selectedProfile.approved ? "Set Pending" : "Approve"}
                 </button>
                 <a
-                  href={`/view?hm_id=${encodeURIComponent(selectedProfile.hm_id)}`}
+                  href={`/#/view?hm_id=${encodeURIComponent(selectedProfile.hm_id)}`}
                   target="_blank"
                   rel="noreferrer"
                   className="text-xs bg-green-800 hover:bg-green-900 px-3 py-1.5 rounded"
